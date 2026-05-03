@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/@jambonz/upgrade-manifest@1/upgrade-manifest.schema.json",
+  "schema_version": "1",
+  "source_version": "10.2.0",
+  "target_version": "10.2.1",
+  "min_daemon_version": "1.0.0",
+  "variant": "mini",
+  "distro": "debian-12",
+  "arch": "amd64",
+  "expected_downtime_seconds": 60,
+  "release_notes_url": "https://jambonz.org/releases/10.2.1",
+  "created_at": "2026-05-08T00:00:00.000Z",
+  "steps": [
+    {
+      "id": "drachtio",
+      "kind": "install_drachtio",
+      "title": "Installing drachtio 0.9.7",
+      "version": "0.9.7",
+      "url": "https://jambonz-debs.s3.amazonaws.com/drachtio/drachtio_0.9.7_debian-12_amd64.deb",
+      "sha256": "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@jambonz/upgrade-manifest",
+  "version": "1.0.0",
+  "description": "JSON Schema and validator for jambonz upgrade-package manifests",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/",
+    "lint": "eslint lib/ index.js test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jambonz/upgrade-manifest.git"
+  },
+  "keywords": [
+    "jambonz",
+    "json-schema",
+    "ajv",
+    "upgrade",
+    "manifest"
+  ],
+  "author": "Dave Horton",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jambonz/upgrade-manifest/issues"
+  },
+  "homepage": "https://github.com/jambonz/upgrade-manifest#readme",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "debug": "^4.3.4"
+  },
+  "devDependencies": {
+    "eslint": "^9.3.0",
+    "eslint-plugin-promise": "^6.2.0",
+    "globals": "^15.3.0"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "upgrade-manifest.schema.json",
+    "examples/"
+  ]
+}

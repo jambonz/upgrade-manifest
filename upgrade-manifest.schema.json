@@ -1,0 +1,367 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://update.jambonz.org/schemas/upgrade-manifest.schema.json",
+  "title": "jambonz upgrade-package manifest",
+  "description": "The contract between update-server (which authors packages) and update-client (which executes them). Spec lives in update-server/DESIGN.md §4. update-server validates submitted manifests against this schema in its admin upload flow; update-client validates against it as the first thing it does in preflight.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_version",
+    "target_version",
+    "min_daemon_version",
+    "variant",
+    "distro",
+    "arch",
+    "expected_downtime_seconds",
+    "release_notes_url",
+    "created_at",
+    "steps"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional reference to this schema, for editor support."
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Manifest schema version. Bump when a daemon-incompatible change is made."
+    },
+    "source_version": {
+      "$ref": "#/definitions/semver",
+      "description": "Exact match against the box's current jambonz version. Stepwise rule (DESIGN.md §6) — must be the immediately-prior release."
+    },
+    "target_version": {
+      "$ref": "#/definitions/semver",
+      "description": "The jambonz version this manifest installs."
+    },
+    "min_daemon_version": {
+      "$ref": "#/definitions/semver",
+      "description": "Minimum update-client version required to execute this manifest. update-client refuses if its own version is older."
+    },
+    "variant": {
+      "type": "string",
+      "enum": ["mini"],
+      "description": "Deployment variant. Only 'mini' in v1."
+    },
+    "distro": {
+      "type": "string",
+      "enum": ["debian-12"],
+      "description": "OS distribution. Only 'debian-12' in v1."
+    },
+    "arch": {
+      "type": "string",
+      "enum": ["amd64"],
+      "description": "CPU architecture. Only 'amd64' in v1; arm64 in a future release."
+    },
+    "expected_downtime_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Estimated downtime; surfaced in the portal's confirmation modal."
+    },
+    "release_notes_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Public URL the operator can visit to read what's in this release."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this manifest was authored. ISO 8601 with millisecond precision and UTC Z."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered list of operations. update-client executes top-to-bottom; rollback walks completed steps in reverse.",
+      "items": { "$ref": "#/definitions/step" }
+    }
+  },
+
+  "definitions": {
+
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semver x.y.z. No pre-release tags, no build metadata."
+    },
+
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex-encoded SHA-256."
+    },
+
+    "stepId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Stable id for the step within this manifest. Used in run state, rollback.sh, and SSE events. Must be unique across steps in this manifest (uniqueness enforced by update-client at preflight time, not by this schema)."
+    },
+
+    "stepTitle": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Human-readable step description. Shown in the portal SSE stream."
+    },
+
+    "timeoutSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "description": "Hard timeout. On exceed, the step is treated as failed and rollback begins."
+    },
+
+    "runAs": {
+      "type": "string",
+      "enum": ["root", "jambonz"],
+      "default": "root",
+      "description": "Linux user identity for the step. 'jambonz' triggers `sudo -u jambonz -H` execution; required for pm2 commands and database migrations."
+    },
+
+    "step": {
+      "oneOf": [
+        { "$ref": "#/definitions/installCoreStep" },
+        { "$ref": "#/definitions/installNodeAppsStep" },
+        { "$ref": "#/definitions/installDebStep" },
+        { "$ref": "#/definitions/runDbMigrationStep" },
+        { "$ref": "#/definitions/patchEcosystemEnvStep" },
+        { "$ref": "#/definitions/patchSystemdEnvStep" },
+        { "$ref": "#/definitions/patchEnvFileStep" },
+        { "$ref": "#/definitions/restartUnitStep" }
+      ]
+    },
+
+    "installCoreStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Install or upgrade one of the core jambonz components. The kind hard-codes the package_name and which units to restart. Snapshot-and-install with filesystem-level rollback (DESIGN.md §14.2).",
+      "required": ["id", "kind", "title", "version", "url", "sha256"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "enum": ["install_drachtio", "install_freeswitch", "install_upload_recordings", "install_pcap_server"] },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "version":         { "$ref": "#/definitions/semver" },
+        "url":             { "type": "string", "format": "uri" },
+        "sha256":          { "$ref": "#/definitions/sha256" }
+      }
+    },
+
+    "installNodeAppsStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Replace /home/jambonz/apps/ with a fresh tarball. Operator-owned ecosystem.config.js and per-app .env files are auto-preserved (DESIGN.md §14.3). Snapshot+rename rollback.",
+      "required": ["id", "kind", "title", "version", "url", "sha256"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "install_node_apps" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "version":         { "$ref": "#/definitions/semver" },
+        "url":             { "type": "string", "format": "uri" },
+        "sha256":          { "$ref": "#/definitions/sha256" }
+      }
+    },
+
+    "installDebStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Generic .deb install — for 3rd-party packages (telegraf, future Node.js runtime, etc.) where the daemon has no prior knowledge. Same snapshot-and-install model as the core install kinds (DESIGN.md §14.2).",
+      "required": ["id", "kind", "title", "package_name", "version", "url", "sha256"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "install_deb" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "package_name":    { "type": "string", "minLength": 1, "description": "Debian package name (e.g. 'telegraf')." },
+        "version":         { "$ref": "#/definitions/semver" },
+        "url":             { "type": "string", "format": "uri" },
+        "sha256":          { "$ref": "#/definitions/sha256" },
+        "restart_units": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Optional list of systemd units to restart after install. Empty/absent = no auto-restart."
+        }
+      }
+    },
+
+    "runDbMigrationStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Run the api-server's idempotent backwards-compatible schema migration script (DESIGN.md §14.1). No rollback by design — schema changes are BC by rule.",
+      "required": ["id", "kind", "title", "command"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "run_db_migration" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "command":         { "type": "string", "minLength": 1, "description": "Shell command to execute. Typically `node /home/jambonz/apps/api-server/db/upgrade-jambonz-db.js`." },
+        "run_as":          { "$ref": "#/definitions/runAs" }
+      }
+    },
+
+    "patchEcosystemEnvStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Surgical insert/remove of env vars in /home/jambonz/apps/ecosystem.config.js for a named app. Operator-owned file; .bak.<run-id> rollback (DESIGN.md §14.4).",
+      "required": ["id", "kind", "title", "patches"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "patch_ecosystem_env" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "patches": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/ecosystemEnvPatch" }
+        }
+      }
+    },
+
+    "patchSystemdEnvStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Surgical insert/remove of Environment= lines in [Service] section of a named systemd unit file. Operator-owned file; .bak.<run-id> rollback (DESIGN.md §14.5).",
+      "required": ["id", "kind", "title", "patches"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "patch_systemd_env" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "patches": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/systemdEnvPatch" }
+        },
+        "post_action": {
+          "type": "string",
+          "description": "Optional command to run after the patch is written (typically 'systemctl daemon-reload')."
+        }
+      }
+    },
+
+    "patchEnvFileStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Surgical insert/remove of KEY=VALUE lines in a per-app .env file (e.g. /home/jambonz/apps/webapp/.env). Operator-owned; .bak.<run-id> rollback (DESIGN.md §4 patch_env_file).",
+      "required": ["id", "kind", "title", "patches"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "patch_env_file" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "patches": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/envFilePatch" }
+        }
+      }
+    },
+
+    "restartUnitStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Explicit restart of a systemd unit or pm2-managed app. Rare — restarts are bundled into install_* step kinds. Used for config-only releases that don't change a binary. Rollback = restart again with the rolled-back artifacts.",
+      "required": ["id", "kind", "title", "manager", "unit"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "restart_unit" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "manager":         { "type": "string", "enum": ["systemd", "pm2"] },
+        "unit":            { "type": "string", "minLength": 1, "description": "systemd unit name (e.g. 'drachtio') or pm2 process name (e.g. 'all', 'webapp')." },
+        "run_as":          { "$ref": "#/definitions/runAs" }
+      }
+    },
+
+    "ecosystemEnvPatch": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "app", "key", "value"],
+          "properties": {
+            "op":    { "const": "set_env" },
+            "app":   { "type": "string", "minLength": 1, "description": "pm2 app name (matches the 'name' field in ecosystem.config.js apps[])." },
+            "key":   { "$ref": "#/definitions/envKey" },
+            "value": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "app", "key"],
+          "properties": {
+            "op":  { "const": "unset_env" },
+            "app": { "type": "string", "minLength": 1 },
+            "key": { "$ref": "#/definitions/envKey" }
+          }
+        }
+      ]
+    },
+
+    "systemdEnvPatch": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "unit", "key", "value"],
+          "properties": {
+            "op":    { "const": "set_env" },
+            "unit":  { "type": "string", "minLength": 1, "description": "systemd unit name including the .service suffix (e.g. 'drachtio.service')." },
+            "key":   { "$ref": "#/definitions/envKey" },
+            "value": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "unit", "key"],
+          "properties": {
+            "op":   { "const": "unset_env" },
+            "unit": { "type": "string", "minLength": 1 },
+            "key":  { "$ref": "#/definitions/envKey" }
+          }
+        }
+      ]
+    },
+
+    "envFilePatch": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "file", "key", "value"],
+          "properties": {
+            "op":    { "const": "set_env" },
+            "file":  { "type": "string", "pattern": "^/", "description": "Absolute path to the .env file (e.g. '/home/jambonz/apps/webapp/.env')." },
+            "key":   { "$ref": "#/definitions/envKey" },
+            "value": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "file", "key"],
+          "properties": {
+            "op":   { "const": "unset_env" },
+            "file": { "type": "string", "pattern": "^/" },
+            "key":  { "$ref": "#/definitions/envKey" }
+          }
+        }
+      ]
+    },
+
+    "envKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Environment variable name. Standard shell convention: starts with letter or underscore, alphanumeric plus underscore."
+    }
+  }
+}
