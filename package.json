@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "JSON Schema and validator for jambonz upgrade-package manifests",
   "main": "index.js",
+  "bin": {
+    "validate-manifest": "bin/validate-manifest.js"
+  },
   "scripts": {
     "test": "node test/",
     "lint": "eslint lib/ index.js test/"
@@ -38,6 +41,7 @@
     "index.js",
     "lib/",
     "upgrade-manifest.schema.json",
-    "examples/"
+    "examples/",
+    "bin/"
   ]
 }

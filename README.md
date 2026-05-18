@@ -14,7 +14,19 @@ Full design context: [update-server/DESIGN.md §4](https://github.com/jambonz/up
 npm install @jambonz/upgrade-manifest
 ```
 
-## Usage
+## CLI
+
+A standalone validation script is included — no global install or project setup needed beyond `npm install` in this directory:
+
+```bash
+cd upgrade-manifest/
+npm install          # once
+npx validate-manifest /path/to/manifest.json
+```
+
+Prints `OK` and exits 0 on success; prints all validation errors and exits 1 on failure.
+
+## Usage (programmatic)
 
 ```js
 const { validateManifest } = require('@jambonz/upgrade-manifest');
