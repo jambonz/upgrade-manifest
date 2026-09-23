@@ -31,7 +31,7 @@ function expectInvalid(label, manifest, expectedKeyword) {
 
 /* fixtures pass */
 expectValid('minimal manifest validates', minimal);
-expectValid('full manifest (all 11 step kinds) validates', full);
+expectValid('full manifest (all 13 step kinds) validates', full);
 
 /* missing required field */
 {
@@ -103,6 +103,52 @@ expectValid('full manifest (all 11 step kinds) validates', full);
 {
   const m = {...minimal, steps: []};
   expectInvalid('empty steps array fails (minItems: 1)', m, 'minItems');
+}
+
+/* daemon_deb_url + daemon_deb_sha256: both present → valid */
+{
+  const m = {
+    ...minimal,
+    daemon_deb_url: 'https://example.com/jambonz-updater_2.0.0_amd64.deb',
+    daemon_deb_sha256: 'a'.repeat(64)
+  };
+  expectValid('manifest with both daemon_deb fields validates', m);
+}
+
+/* daemon_deb_url + daemon_deb_sha256: neither present → valid */
+{
+  const m = {...minimal};
+  delete m.daemon_deb_url;
+  delete m.daemon_deb_sha256;
+  expectValid('manifest without daemon_deb fields validates', m);
+}
+
+/* daemon_deb_url without daemon_deb_sha256 → invalid (dependencies) */
+{
+  const m = {
+    ...minimal,
+    daemon_deb_url: 'https://example.com/jambonz-updater_2.0.0_amd64.deb'
+  };
+  expectInvalid('daemon_deb_url without daemon_deb_sha256 fails', m, 'dependencies');
+}
+
+/* daemon_deb_sha256 without daemon_deb_url → invalid (dependencies) */
+{
+  const m = {
+    ...minimal,
+    daemon_deb_sha256: 'a'.repeat(64)
+  };
+  expectInvalid('daemon_deb_sha256 without daemon_deb_url fails', m, 'dependencies');
+}
+
+/* daemon_deb_sha256 with invalid format → invalid */
+{
+  const m = {
+    ...minimal,
+    daemon_deb_url: 'https://example.com/jambonz-updater_2.0.0_amd64.deb',
+    daemon_deb_sha256: 'not-a-valid-sha256'
+  };
+  expectInvalid('daemon_deb_sha256 invalid hex fails', m, 'pattern');
 }
 
 console.log('\nall tests passed');

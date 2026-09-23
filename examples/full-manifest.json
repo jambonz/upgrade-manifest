@@ -45,6 +45,21 @@
       "sha256": "222234567890abcdef1234567890abcdef1234567890abcdef1234567890abca"
     },
     {
+      "id": "stop-freeswitch",
+      "kind": "stop_unit",
+      "title": "Stopping FreeSWITCH (replaced by mediajam)",
+      "unit": "freeswitch",
+      "disable": true
+    },
+    {
+      "id": "mediajam",
+      "kind": "install_mediajam",
+      "title": "Installing mediajam 0.4.8",
+      "version": "0.4.8",
+      "url": "https://jambonz-debs.s3.amazonaws.com/mediajam/mediajam_0.4.8_debian-12_amd64.deb",
+      "sha256": "555234567890abcdef1234567890abcdef1234567890abcdef1234567890abca"
+    },
+    {
       "id": "telegraf",
       "kind": "install_deb",
       "title": "Upgrading telegraf to 1.30.0",

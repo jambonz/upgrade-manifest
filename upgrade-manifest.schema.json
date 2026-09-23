@@ -71,12 +71,25 @@
       "format": "date-time",
       "description": "When this manifest was authored. ISO 8601 with millisecond precision and UTC Z."
     },
+    "daemon_deb_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to a .deb that upgrades the update-client daemon. Present only when min_daemon_version exceeds the currently-deployed daemon. Both daemon_deb_url and daemon_deb_sha256 must be supplied together."
+    },
+    "daemon_deb_sha256": {
+      "$ref": "#/definitions/sha256",
+      "description": "SHA-256 of the daemon .deb file. Must accompany daemon_deb_url."
+    },
     "steps": {
       "type": "array",
       "minItems": 1,
       "description": "Ordered list of operations. update-client executes top-to-bottom; rollback walks completed steps in reverse.",
       "items": { "$ref": "#/definitions/step" }
     }
+  },
+  "dependencies": {
+    "daemon_deb_url": ["daemon_deb_sha256"],
+    "daemon_deb_sha256": ["daemon_deb_url"]
   },
 
   "definitions": {
@@ -131,7 +144,8 @@
         { "$ref": "#/definitions/patchEcosystemEnvStep" },
         { "$ref": "#/definitions/patchSystemdEnvStep" },
         { "$ref": "#/definitions/patchEnvFileStep" },
-        { "$ref": "#/definitions/restartUnitStep" }
+        { "$ref": "#/definitions/restartUnitStep" },
+        { "$ref": "#/definitions/stopUnitStep" }
       ]
     },
 
@@ -142,7 +156,7 @@
       "required": ["id", "kind", "title", "version", "url", "sha256"],
       "properties": {
         "id":              { "$ref": "#/definitions/stepId" },
-        "kind":            { "enum": ["install_drachtio", "install_freeswitch", "install_upload_recordings", "install_pcap_server"] },
+        "kind":            { "enum": ["install_drachtio", "install_freeswitch", "install_upload_recordings", "install_pcap_server", "install_mediajam"] },
         "title":           { "$ref": "#/definitions/stepTitle" },
         "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
         "version":         { "$ref": "#/definitions/semver" },
@@ -275,6 +289,21 @@
         "manager":         { "type": "string", "enum": ["systemd", "pm2"] },
         "unit":            { "type": "string", "minLength": 1, "description": "systemd unit name (e.g. 'drachtio') or pm2 process name (e.g. 'all', 'webapp')." },
         "run_as":          { "$ref": "#/definitions/runAs" }
+      }
+    },
+
+    "stopUnitStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Stop (and optionally disable) a systemd unit. Used to decommission a service that is being replaced (e.g. FreeSWITCH → mediajam). Rollback re-enables and starts the unit.",
+      "required": ["id", "kind", "title", "unit"],
+      "properties": {
+        "id":              { "$ref": "#/definitions/stepId" },
+        "kind":            { "const": "stop_unit" },
+        "title":           { "$ref": "#/definitions/stepTitle" },
+        "timeout_seconds": { "$ref": "#/definitions/timeoutSeconds" },
+        "unit":            { "type": "string", "minLength": 1, "description": "systemd unit name (e.g. 'freeswitch')." },
+        "disable":         { "type": "boolean", "default": false, "description": "If true, also disable the unit so it does not start on reboot." }
       }
     },
 
